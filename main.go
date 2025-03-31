@@ -10,32 +10,135 @@ import (
 
 var ctx = context.Background()
 
-func menu() {
+func menu(conn *pgx.Conn) {
 	var userInputMenu int
-	fmt.Print(`
-	1 - Показать все контакты
-	2 - Добавить контакт
-	3 - Изменить контакт
-	4 - Удалить контакт
-	0 - Выход
+
+	for {
+		fmt.Print(`
+	1 - Показать все контакты |  2 - Добавить контакт
+	--------------------------------------------------
+	3 - Изменить контакт      |  4 - Удалить контакт
+	--------------------------------------------------
+	0 - Выход                 |
 	`)
-	fmt.Print("Выберите действие: ")
+		fmt.Print("Выберите действие: ")
 
-	fmt.Scan(&userInputMenu)
-	switch userInputMenu {
-	case '1':
+		fmt.Scan(&userInputMenu)
+		switch userInputMenu {
+		case 1:
+			outpute(conn)
+		case 2:
+			addnumber(conn)
+		case 3:
+			update(conn)
+		case 4:
+			delete(conn)
+		case 0:
+			return
+		}
+	}
 
-	case `2`:
-	case `3`:
-	case `4`:
-	case `5`:
+}
+func outpute(conn *pgx.Conn) {
+	// вывод всех пользователей
+	rows, err := conn.Query(ctx, `
+	SELECT * FROM users ORDER BY id ASC;
+	`)
+	if err != nil {
+		log.Fatalf("Ошибка при запросе данных %v", err)
+	}
+	defer rows.Close()
 
+	// проверка на пустую таблицу
+	if !rows.Next() {
+		fmt.Println("Телефонная книга пуста!")
+		return
+	}
+
+	fmt.Println("Список всех пользователей:")
+	for rows.Next() {
+		var id int
+		var userName string
+		var phoneNumber string
+		err := rows.Scan(&id, &userName, &phoneNumber)
+		if err != nil {
+			log.Fatalf("Ошибка при считывании строки: %v", err)
+		}
+		fmt.Printf("ID: %d | Имя: %s | Телефон: %s\n", id, userName, phoneNumber)
 	}
 
 }
 
+// ввод данных от пользователя
+func addnumber(conn *pgx.Conn) {
+	var name string
+	var phoneNumber string
+
+	// Ввод имени и номера телефона
+	fmt.Print("Введите ваше имя: ")
+	fmt.Scan(&name)
+	fmt.Scanln() // очистка буфера \n
+	fmt.Print("Введите ваш номер телефона: ")
+	fmt.Scan(&phoneNumber)
+
+	// Проверка на пустые данные
+	if name == "" || phoneNumber == "" {
+		fmt.Println("Имя или номер телефона не могут быть пустыми!")
+		return
+	}
+
+	// Вставка данных в таблицу
+	_, err := conn.Exec(ctx, `
+	INSERT INTO users (name, phone_number) VALUES($1, $2);
+	`, name, phoneNumber)
+	if err != nil {
+		log.Fatalf("Ошибка при добавлении данных пользователя %v", err)
+	}
+	fmt.Println("Ваши данные успешно добавлены!")
+
+}
+
+// изменение данных
+func update(conn *pgx.Conn) {
+	var id int
+	var userName string
+	var phoneNumber string
+	fmt.Print("Введите ID контакта, который нужный изменить: ")
+	fmt.Scan(&id)
+	fmt.Scanln() // очистка буфера \n
+	fmt.Print("Введите имя: ")
+	fmt.Scan(&userName)
+	fmt.Scanln() // очистка буфера \n
+	fmt.Print("Введите ваш номер телефона: ")
+	fmt.Scan(&phoneNumber)
+
+	_, err := conn.Exec(ctx, `
+	UPDATE users SET name = $1, phone_number = $2 WHERE id = $3;
+	`, userName, phoneNumber, id)
+	if err != nil {
+		log.Fatalf("Ошибка при обновлении данных: %v", err)
+		return
+	}
+	fmt.Println("Данные успешно обновлены!")
+}
+
+// удаление записи
+func delete(conn *pgx.Conn) {
+	var id int
+	fmt.Print("Введите ID контакта, который нужно удалить: ")
+	fmt.Scan(&id)
+
+	_, err := conn.Exec(ctx, `
+	DELETE FROM users WHERE id =$1;
+	`, id)
+	if err != nil {
+		log.Fatalf("Ошибка при удалении данных пользователя: %v", err)
+	}
+	fmt.Println("Пользователь успешно удален!")
+}
+
 func main() {
-	menu()
+
 	// Строка подключения
 	connStr := "postgres://postgres:1234@localhost:5432/mydb"
 
@@ -54,7 +157,7 @@ func main() {
 CREATE TABLE IF NOT EXISTS users(
 id SERIAL PRIMARY KEY,
 name TEXT NOT NULL,
-age INT
+phone_number TEXT NOT NULL
 );
 `)
 	if err != nil {
@@ -62,41 +165,6 @@ age INT
 	}
 	fmt.Println("Таблица users успешно создана!")
 
-	menu()
-
-	// ввод данных от пользователя
-	var name string
-	var age int
-	fmt.Print("Введите ваше имя и возраст: ")
-	fmt.Scanln(&name, &age)
-
-	_, err = conn.Exec(ctx, `
-	INSERT INTO users (name, age) VALUES($1, $2);
-	`, name, age)
-	if err != nil {
-		log.Fatalf("Ошибка при добавлении данных пользователя %v", err)
-	}
-	fmt.Println("Ваши данные успешно добавлены!")
-
-	rows, err := conn.Query(ctx, `
-	SELECT * FROM users;
-	`)
-	if err != nil {
-		log.Fatalf("Ошибка при запросе данных %v", err)
-	}
-	defer rows.Close()
-
-	// вывод всех пользователей
-	fmt.Println("Список всех пользователей:")
-	for rows.Next() {
-		var id int
-		var userName string
-		var userAge int
-		err := rows.Scan(&id, &userName, &userAge)
-		if err != nil {
-			log.Fatalf("Ошибка при считывании строки: %v", err)
-		}
-		fmt.Printf("ID: %d | Имя: %s | Возраст: %d\n", id, userName, userAge)
-	}
+	menu(conn)
 
 }
