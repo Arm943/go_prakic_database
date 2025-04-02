@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 
@@ -29,7 +28,7 @@ func menu(conn *pgx.Conn) {
 		case 1:
 			outpute(conn)
 		case 2:
-			addnumber(conn)
+			addNumber(conn)
 		case 3:
 			update(conn)
 		case 4:
@@ -76,7 +75,7 @@ func outpute(conn *pgx.Conn) {
 }
 
 // ввод данных от пользователя
-func addnumber(conn *pgx.Conn) {
+func addNumber(conn *pgx.Conn) {
 	var name string
 	var phoneNumber string
 
@@ -196,21 +195,75 @@ func searchContact(conn *pgx.Conn) {
 	fmt.Print("Введите имя для поиска: ")
 	fmt.Scan(&name)
 
-	row := conn.QueryRow(ctx, `
+	//Поиск с использованием индекса
+	rows, err := conn.Query(ctx, `
+	SELECT id, name, phone_number FROM users WHERE name = $1
+	`, name)
+	if err != nil {
+		log.Fatalf("Ошибка при выполнении запроса для поиска: %v", err)
+	}
+	defer rows.Close()
+
+	// Если есть результаты, то выводим их
+
+	found := false
+	for rows.Next() {
+		err := rows.Scan(&id, &name, &phoneNumber)
+		if err != nil {
+			log.Fatalf("Ошибка при сканировании строки: %v", err)
+		}
+		fmt.Printf("Найден контакт: %s, %s, ID: %d\n", name, phoneNumber, id)
+		found = true
+	}
+
+	if !found {
+		fmt.Println("Контакт с таким именем не найден.")
+	}
+	if rows.Err() != nil {
+		log.Fatalf("Ошибка при переборе строки: %v", err)
+	}
+
+}
+
+/*
+func searchContact(conn *pgx.Conn) {
+	var name string
+
+	fmt.Print("Введите имя для поиска: ")
+	fmt.Scan(&name)
+
+	rows, err := conn.Query(ctx, `
 SELECT id, name, phone_number FROM users WHERE name = $1
 `, name)
-
-	err := row.Scan(&id, &name, &phoneNumber)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			fmt.Println("Контакта с таким именем не найдено")
-		} else {
-			log.Fatalf("Ошибка при поиске контактов %v", err)
-		}
-		return
+		log.Fatalf("Ошибка при выполнении запроса: %v", err)
 	}
-	fmt.Printf("Найден контакт: %s, %s, ID: %d\n", name, phoneNumber, id)
+	defer rows.Close()
+
+	found := false
+	for rows.Next() {
+		var id int
+		var contactName, phoneNumber string
+
+		err := rows.Scan(&id, &contactName, &phoneNumber)
+		if err != nil {
+			log.Fatalf("Ошибка при чтении данных: %v", err)
+		}
+
+		fmt.Printf("Найден контакт: %s, Телефон: %s, ID: %d\n", contactName, phoneNumber, id)
+		found = true
+	}
+
+	if !found {
+		fmt.Println("Контактов с таким именем не найдено.")
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Fatalf("Ошибка при обработке результатов: %v", err)
+	}
 }
+
+*/
 
 func main() {
 
@@ -239,6 +292,14 @@ phone_number TEXT NOT NULL
 		log.Fatalf("Ошибка при создании таблицы: %v", err)
 	}
 	fmt.Println("Таблица users успешно создана!")
+
+	_, err = conn.Exec(ctx, `
+CREATE INDEX IF NOT EXISTS index_name ON users(name);
+`)
+	if err != nil {
+		log.Fatalf("Ошибка при создании индекса index_name: %v", err)
+	}
+	fmt.Println("Индексы для поля name успешно созданы!")
 
 	menu(conn)
 
