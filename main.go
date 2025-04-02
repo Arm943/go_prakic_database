@@ -87,16 +87,38 @@ func addnumber(conn *pgx.Conn) {
 		return
 	}
 
-	// Вставка данных в таблицу
-	_, err := conn.Exec(ctx, `
-	INSERT INTO users (name, phone_number) VALUES($1, $2);
-	`, name, phoneNumber)
+	// Вставка данных в таблицу через транзакцию
+	tx, err := conn.Begin(ctx)
 	if err != nil {
-		log.Fatalf("Ошибка при добавлении данных пользователя %v", err)
+		log.Fatalf("Ошибка при начале транзакции: %v", err)
 	}
+
+	_, err = tx.Exec(ctx, `INSERT INTO users (name, phone_number) VALUES($1, $2);`, name, phoneNumber)
+	if err != nil {
+		tx.Rollback(ctx) // если ошибка — откат
+		log.Fatalf("Ошибка при добавлении данных пользователя: %v", err)
+	}
+
+	err = tx.Commit(ctx) // фиксируем изменения
+	if err != nil {
+		log.Fatalf("Ошибка при подтверждении транзакции: %v", err)
+	}
+
 	fmt.Println("Ваши данные успешно добавлены!")
 
 }
+
+/*
+// Вставка данных в таблицу сразу
+		_, err := conn.Exec(ctx, `
+		INSERT INTO users (name, phone_number) VALUES($1, $2);
+		`, name, phoneNumber)
+		if err != nil {
+			log.Fatalf("Ошибка при добавлении данных пользователя %v", err)
+		}
+		fmt.Println("Ваши данные успешно добавлены!")
+}
+*/
 
 // изменение данных
 func update(conn *pgx.Conn) {
@@ -112,14 +134,36 @@ func update(conn *pgx.Conn) {
 	fmt.Print("Введите ваш номер телефона: ")
 	fmt.Scan(&phoneNumber)
 
-	_, err := conn.Exec(ctx, `
-	UPDATE users SET name = $1, phone_number = $2 WHERE id = $3;
-	`, userName, phoneNumber, id)
+	/*
+		_, err := conn.Exec(ctx, `
+		UPDATE users SET name = $1, phone_number = $2 WHERE id = $3;
+		`, userName, phoneNumber, id)
+		if err != nil {
+			log.Fatalf("Ошибка при обновлении данных: %v", err)
+			return
+		}
+		fmt.Println("Данные успешно обновлены!")
+	*/
+
+	tx, err := conn.Begin(ctx)
 	if err != nil {
-		log.Fatalf("Ошибка при обновлении данных: %v", err)
-		return
+		log.Fatalf("Ошибка при начале транзакции: %v", err)
 	}
-	fmt.Println("Данные успешно обновлены!")
+	_, err = tx.Exec(ctx, `
+	UPDATE users SET name = $1, phone_number = $2 WHERE id = $3;
+`, userName, phoneNumber, id)
+
+	if err != nil {
+		tx.Rollback(ctx)
+		log.Fatalf("Ошибка при добавлении данных пользователя: %v", err)
+	}
+	err = tx.Commit(ctx)
+	if err != nil {
+		log.Fatalf("Ошибка при сохранении измененных данных: %v", err)
+	}
+
+	fmt.Println("Ваши данные успешно добавлены!")
+
 }
 
 // удаление записи
