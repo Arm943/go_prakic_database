@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
@@ -19,7 +20,7 @@ func menu(conn *pgx.Conn) {
 	--------------------------------------------------
 	3 - Изменить контакт      |  4 - Удалить контакт
 	--------------------------------------------------
-	0 - Выход                 |
+	5 - Поиск контакта        |  0 - Выход     
 	`)
 		fmt.Print("Выберите действие: ")
 
@@ -33,12 +34,17 @@ func menu(conn *pgx.Conn) {
 			update(conn)
 		case 4:
 			delete(conn)
+		case 5:
+			searchContact(conn)
 		case 0:
 			return
+		default:
+			fmt.Println("Неверный ввод, попробуйте снова.")
 		}
 	}
 
 }
+
 func outpute(conn *pgx.Conn) {
 	// вывод всех пользователей
 	rows, err := conn.Query(ctx, `
@@ -179,6 +185,31 @@ func delete(conn *pgx.Conn) {
 		log.Fatalf("Ошибка при удалении данных пользователя: %v", err)
 	}
 	fmt.Println("Пользователь успешно удален!")
+}
+
+// поиск номера телефона по имени
+func searchContact(conn *pgx.Conn) {
+	var name string
+	var id int
+	var phoneNumber string
+
+	fmt.Print("Введите имя для поиска: ")
+	fmt.Scan(&name)
+
+	row := conn.QueryRow(ctx, `
+SELECT id, name, phone_number FROM users WHERE name = $1
+`, name)
+
+	err := row.Scan(&id, &name, &phoneNumber)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			fmt.Println("Контакта с таким именем не найдено")
+		} else {
+			log.Fatalf("Ошибка при поиске контактов %v", err)
+		}
+		return
+	}
+	fmt.Printf("Найден контакт: %s, %s, ID: %d\n", name, phoneNumber, id)
 }
 
 func main() {
