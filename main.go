@@ -50,7 +50,7 @@ func outpute(conn *pgx.Conn) {
 	SELECT * FROM users ORDER BY id ASC;
 	`)
 	if err != nil {
-		log.Fatalf("Ошибка при запросе данных %v", err)
+		log.Fatalf("❌ Ошибка при запросе данных %v", err)
 	}
 	defer rows.Close()
 
@@ -67,7 +67,7 @@ func outpute(conn *pgx.Conn) {
 		var phoneNumber string
 		err := rows.Scan(&id, &userName, &phoneNumber)
 		if err != nil {
-			log.Fatalf("Ошибка при считывании строки: %v", err)
+			log.Fatalf("❌ Ошибка при считывании строки: %v", err)
 		}
 		fmt.Printf("ID: %d | Имя: %s | Телефон: %s\n", id, userName, phoneNumber)
 	}
@@ -95,35 +95,23 @@ func addNumber(conn *pgx.Conn) {
 	// Вставка данных в таблицу через транзакцию
 	tx, err := conn.Begin(ctx)
 	if err != nil {
-		log.Fatalf("Ошибка при начале транзакции: %v", err)
+		log.Fatalf("❌ Ошибка при начале транзакции: %v", err)
 	}
 
 	_, err = tx.Exec(ctx, `INSERT INTO users (name, phone_number) VALUES($1, $2);`, name, phoneNumber)
 	if err != nil {
 		tx.Rollback(ctx) // если ошибка — откат
-		log.Fatalf("Ошибка при добавлении данных пользователя: %v", err)
+		log.Fatalf("❌ Ошибка при добавлении данных пользователя: %v", err)
 	}
 
 	err = tx.Commit(ctx) // фиксируем изменения
 	if err != nil {
-		log.Fatalf("Ошибка при подтверждении транзакции: %v", err)
+		log.Fatalf("❌ Ошибка при подтверждении транзакции: %v", err)
 	}
 
 	fmt.Println("Ваши данные успешно добавлены!")
 
 }
-
-/*
-// Вставка данных в таблицу сразу
-		_, err := conn.Exec(ctx, `
-		INSERT INTO users (name, phone_number) VALUES($1, $2);
-		`, name, phoneNumber)
-		if err != nil {
-			log.Fatalf("Ошибка при добавлении данных пользователя %v", err)
-		}
-		fmt.Println("Ваши данные успешно добавлены!")
-}
-*/
 
 // изменение данных
 func update(conn *pgx.Conn) {
@@ -139,20 +127,9 @@ func update(conn *pgx.Conn) {
 	fmt.Print("Введите ваш номер телефона: ")
 	fmt.Scan(&phoneNumber)
 
-	/*
-		_, err := conn.Exec(ctx, `
-		UPDATE users SET name = $1, phone_number = $2 WHERE id = $3;
-		`, userName, phoneNumber, id)
-		if err != nil {
-			log.Fatalf("Ошибка при обновлении данных: %v", err)
-			return
-		}
-		fmt.Println("Данные успешно обновлены!")
-	*/
-
 	tx, err := conn.Begin(ctx)
 	if err != nil {
-		log.Fatalf("Ошибка при начале транзакции: %v", err)
+		log.Fatalf("❌ Ошибка при начале транзакции: %v", err)
 	}
 	_, err = tx.Exec(ctx, `
 	UPDATE users SET name = $1, phone_number = $2 WHERE id = $3;
@@ -160,11 +137,11 @@ func update(conn *pgx.Conn) {
 
 	if err != nil {
 		tx.Rollback(ctx)
-		log.Fatalf("Ошибка при добавлении данных пользователя: %v", err)
+		log.Fatalf("❌ Ошибка при добавлении данных пользователя: %v", err)
 	}
 	err = tx.Commit(ctx)
 	if err != nil {
-		log.Fatalf("Ошибка при сохранении измененных данных: %v", err)
+		log.Fatalf("❌ Ошибка при сохранении измененных данных: %v", err)
 	}
 
 	fmt.Println("Ваши данные успешно добавлены!")
@@ -174,14 +151,14 @@ func update(conn *pgx.Conn) {
 // удаление записи
 func delete(conn *pgx.Conn) {
 	var id int
-	fmt.Print("Введите ID контакта, который нужно удалить: ")
+	fmt.Print("❌ Введите ID контакта, который нужно удалить: ")
 	fmt.Scan(&id)
 
 	_, err := conn.Exec(ctx, `
 	DELETE FROM users WHERE id =$1;
 	`, id)
 	if err != nil {
-		log.Fatalf("Ошибка при удалении данных пользователя: %v", err)
+		log.Fatalf("❌ Ошибка при удалении данных пользователя: %v", err)
 	}
 	fmt.Println("Пользователь успешно удален!")
 }
@@ -200,7 +177,7 @@ func searchContact(conn *pgx.Conn) {
 	SELECT id, name, phone_number FROM users WHERE name = $1
 	`, name)
 	if err != nil {
-		log.Fatalf("Ошибка при выполнении запроса для поиска: %v", err)
+		log.Fatalf("❌ Ошибка при выполнении запроса для поиска: %v", err)
 	}
 	defer rows.Close()
 
@@ -210,7 +187,7 @@ func searchContact(conn *pgx.Conn) {
 	for rows.Next() {
 		err := rows.Scan(&id, &name, &phoneNumber)
 		if err != nil {
-			log.Fatalf("Ошибка при сканировании строки: %v", err)
+			log.Fatalf("❌ Ошибка при сканировании строки: %v", err)
 		}
 		fmt.Printf("Найден контакт: %s, %s, ID: %d\n", name, phoneNumber, id)
 		found = true
@@ -220,50 +197,10 @@ func searchContact(conn *pgx.Conn) {
 		fmt.Println("Контакт с таким именем не найден.")
 	}
 	if rows.Err() != nil {
-		log.Fatalf("Ошибка при переборе строки: %v", err)
+		log.Fatalf("❌ Ошибка при переборе строки: %v", err)
 	}
 
 }
-
-/*
-func searchContact(conn *pgx.Conn) {
-	var name string
-
-	fmt.Print("Введите имя для поиска: ")
-	fmt.Scan(&name)
-
-	rows, err := conn.Query(ctx, `
-SELECT id, name, phone_number FROM users WHERE name = $1
-`, name)
-	if err != nil {
-		log.Fatalf("Ошибка при выполнении запроса: %v", err)
-	}
-	defer rows.Close()
-
-	found := false
-	for rows.Next() {
-		var id int
-		var contactName, phoneNumber string
-
-		err := rows.Scan(&id, &contactName, &phoneNumber)
-		if err != nil {
-			log.Fatalf("Ошибка при чтении данных: %v", err)
-		}
-
-		fmt.Printf("Найден контакт: %s, Телефон: %s, ID: %d\n", contactName, phoneNumber, id)
-		found = true
-	}
-
-	if !found {
-		fmt.Println("Контактов с таким именем не найдено.")
-	}
-
-	if err := rows.Err(); err != nil {
-		log.Fatalf("Ошибка при обработке результатов: %v", err)
-	}
-}
-
-*/
 
 func main() {
 
@@ -273,11 +210,11 @@ func main() {
 	// Подключение к базе
 	conn, err := pgx.Connect(ctx, connStr)
 	if err != nil {
-		log.Fatalf("Ошибка подключения: %v", err)
+		log.Fatalf("❌ Ошибка подключения: %v", err)
 	}
 	defer conn.Close(ctx)
 
-	fmt.Println("Успешное подключение к базе!")
+	fmt.Println("✅ Успешное подключение к базе!")
 
 	// Создаем таблицу, если она не существует
 
@@ -289,17 +226,45 @@ phone_number TEXT NOT NULL
 );
 `)
 	if err != nil {
-		log.Fatalf("Ошибка при создании таблицы: %v", err)
+		log.Fatalf("❌ Ошибка при создании таблицы: %v", err)
 	}
-	fmt.Println("Таблица users успешно создана!")
+	fmt.Println("✅ Таблица users успешно создана!")
 
+	// создаем таблицу с тегами
+
+	_, err = conn.Exec(ctx, `
+CREATE TABLE IF NOT EXISTS tags(
+id SERIAL PRIMARY KEY,
+tag TEXT NOT NULL
+);
+`)
+	if err != nil {
+		log.Fatalf("❌ Ошибка при создании таблицы тегов: %v", err)
+	}
+	fmt.Println("✅ Таблица tags успешно создана!")
+
+	// создаем промежуточную таблицу для "многие-ко-многим"
+
+	_, err = conn.Exec(ctx, `
+CREATE TABLE IF NOT EXISTS users_tags(
+user_id INT REFERENCES users(id),
+tag_id INT REFERENCES tags(id),
+PRIMARY KEY (user_id,tag_id)
+);
+`)
+	if err != nil {
+		log.Fatalf("❌ Ошибка при создании таблицы users-tags: %v", err)
+	}
+	fmt.Println("✅ Таблица users-tags тегов успешно создана!")
+
+	// создаем индекс по столбу name
 	_, err = conn.Exec(ctx, `
 CREATE INDEX IF NOT EXISTS index_name ON users(name);
 `)
 	if err != nil {
-		log.Fatalf("Ошибка при создании индекса index_name: %v", err)
+		log.Fatalf("❌ Ошибка при создании индекса index_name: %v", err)
 	}
-	fmt.Println("Индексы для поля name успешно созданы!")
+	fmt.Println("✅ Индексы для поля name успешно созданы!")
 
 	menu(conn)
 
