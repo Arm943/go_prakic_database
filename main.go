@@ -19,14 +19,16 @@ func menu(conn *pgx.Conn) {
 	--------------------------------------------------
 	3 - Изменить контакт      |  4 - Удалить контакт
 	--------------------------------------------------
-	5 - Поиск контакта        |  0 - Выход     
+	5 - Поиск контакта        |  6 - Поиск по тегу 
+	--------------------------------------------------
+	0 - Выход                 | 
 	`)
 		fmt.Print("Выберите действие: ")
 
 		fmt.Scan(&userInputMenu)
 		switch userInputMenu {
 		case 1:
-			outpute(conn)
+			showContactsWithTags(conn)
 		case 2:
 			addNumber(conn)
 		case 3:
@@ -35,6 +37,8 @@ func menu(conn *pgx.Conn) {
 			delete(conn)
 		case 5:
 			searchContact(conn)
+		case 6:
+			searchByTag(conn)
 		case 0:
 			return
 		default:
@@ -44,40 +48,43 @@ func menu(conn *pgx.Conn) {
 
 }
 
-func outpute(conn *pgx.Conn) {
-	// вывод всех пользователей
+// Показать все контакты с их тегами
+func showContactsWithTags(conn *pgx.Conn) {
+	// Запрос для получения всех контактов с их тегами
 	rows, err := conn.Query(ctx, `
-	SELECT * FROM users ORDER BY id ASC;
+	SELECT 
+  users.id, 
+  users.name, 
+  users.phone_number, 
+  STRING_AGG(tags.tag, ', ')
+FROM users
+JOIN users_tags ON users.id = users_tags.user_id
+JOIN tags ON tags.id = users_tags.tag_id
+GROUP BY users.id, users.name, users.phone_number;
 	`)
 	if err != nil {
-		log.Fatalf("❌ Ошибка при запросе данных %v", err)
+		log.Fatalf("❌ Ошибка при выполнении запроса: %v", err)
 	}
 	defer rows.Close()
 
-	// проверка на пустую таблицу
-	if !rows.Next() {
-		fmt.Println("Телефонная книга пуста!")
-		return
-	}
-
-	fmt.Println("Список всех пользователей:")
 	for rows.Next() {
 		var id int
-		var userName string
-		var phoneNumber string
-		err := rows.Scan(&id, &userName, &phoneNumber)
+		var name, phone, tags string
+		err := rows.Scan(&id, &name, &phone, &tags)
 		if err != nil {
-			log.Fatalf("❌ Ошибка при считывании строки: %v", err)
+			log.Fatalf("❌ Ошибка при чтении строки: %v", err)
 		}
-		fmt.Printf("ID: %d | Имя: %s | Телефон: %s\n", id, userName, phoneNumber)
+		fmt.Printf("👤 %s 📱 %s 🏷️  %s\n", name, phone, tags)
 	}
-
 }
 
-// ввод данных от пользователя
+// создание новой записи в книге
 func addNumber(conn *pgx.Conn) {
 	var name string
 	var phoneNumber string
+	var tag string
+	var userID int
+	var tagID int
 
 	// Ввод имени и номера телефона
 	fmt.Print("Введите ваше имя: ")
@@ -85,6 +92,7 @@ func addNumber(conn *pgx.Conn) {
 	fmt.Scanln() // очистка буфера \n
 	fmt.Print("Введите ваш номер телефона: ")
 	fmt.Scan(&phoneNumber)
+	fmt.Scanln() // очистка буфера \n
 
 	// Проверка на пустые данные
 	if name == "" || phoneNumber == "" {
@@ -98,7 +106,8 @@ func addNumber(conn *pgx.Conn) {
 		log.Fatalf("❌ Ошибка при начале транзакции: %v", err)
 	}
 
-	_, err = tx.Exec(ctx, `INSERT INTO users (name, phone_number) VALUES($1, $2);`, name, phoneNumber)
+	//вставляем новые данные в таблицу и при этом получаем данные ID
+	err = tx.QueryRow(ctx, `INSERT INTO users (name, phone_number) VALUES($1, $2) RETURNING id;`, name, phoneNumber).Scan(&userID)
 	if err != nil {
 		tx.Rollback(ctx) // если ошибка — откат
 		log.Fatalf("❌ Ошибка при добавлении данных пользователя: %v", err)
@@ -109,8 +118,29 @@ func addNumber(conn *pgx.Conn) {
 		log.Fatalf("❌ Ошибка при подтверждении транзакции: %v", err)
 	}
 
-	fmt.Println("Ваши данные успешно добавлены!")
+	// функционал добавления тегов
+	fmt.Print("Пропишите теги к контакту: ")
+	fmt.Scan(&tag)
 
+	// Вставка данных в таблицу
+	err = conn.QueryRow(ctx, `
+	INSERT INTO tags (tag) VALUES($1) ON CONFLICT (tag) DO NOTHING RETURNING id;
+	`, tag).Scan(&tagID)
+	if err == pgx.ErrNoRows {
+		//тег уже есть, просто получаем его ID
+		err = conn.QueryRow(ctx, `SELECT id FROM tags WHERE tag = $1`, tag).Scan(&tagID)
+		if err != nil {
+			log.Fatalf("❌ Ошибка при получении id существующего тега: %v", err)
+		}
+	}
+
+	// Связать userID и tagID в таблице users_tags
+
+	_, err = conn.Exec(ctx, `
+	INSERT INTO users_tags (user_id, tag_id) VALUES($1,$2);
+	`, userID, tagID)
+
+	fmt.Println("Ваши данные контакта успешно добавлены!")
 }
 
 // изменение данных
@@ -202,6 +232,42 @@ func searchContact(conn *pgx.Conn) {
 
 }
 
+// поиск контактов по тегам
+
+func searchByTag(conn *pgx.Conn) {
+	var tag string
+	fmt.Print("Введите тег для поиска всех контактов: ")
+	fmt.Scan(&tag)
+
+	// поиск по тегу с использованием индекса
+	rows, err := conn.Query(ctx, `
+SELECT u.name, u.phone_number
+		FROM users u
+		JOIN users_tags ut ON u.id = ut.user_id
+		JOIN tags t ON t.id = ut.tag_id
+		WHERE t.tag = $1;
+`, tag)
+	if err != nil {
+		log.Fatalf("❌ Ошибка при выполнении запроса: %v", err)
+	}
+	defer rows.Close()
+
+	// выводим данные контактов по тегу
+	fmt.Println("Контакты с тегом:", tag)
+	for rows.Next() {
+		var name, phoneNumber string
+		err := rows.Scan(&name, &phoneNumber)
+		if err != nil {
+			log.Fatalf("❌ Ошибка при считывании данных: %v", err)
+		}
+		fmt.Printf("%s,  %s\n", name, phoneNumber)
+	}
+	// Если ошибок нет, выводим сообщение
+	if err := rows.Err(); err != nil {
+		log.Fatalf("❌ Ошибка при обработке строк: %v", err)
+	}
+}
+
 func main() {
 
 	// Строка подключения
@@ -258,14 +324,24 @@ PRIMARY KEY (user_id,tag_id)
 	fmt.Println("✅ Таблица users-tags тегов успешно создана!")
 
 	// создаем индекс по столбу name
+	// индекс по имени
 	_, err = conn.Exec(ctx, `
 CREATE INDEX IF NOT EXISTS index_name ON users(name);
 `)
 	if err != nil {
-		log.Fatalf("❌ Ошибка при создании индекса index_name: %v", err)
+		log.Fatalf("❌ Ошибка при создании индекса по name: %v", err)
 	}
-	fmt.Println("✅ Индексы для поля name успешно созданы!")
+
+	// уникальный индекс по тегу
+	_, err = conn.Exec(ctx, `
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tag_unique ON tags(tag);
+`)
+	if err != nil {
+		log.Fatalf("❌ Ошибка при создании уникального индекса по tag: %v", err)
+	}
+	fmt.Println("✅ Индексы успешно созданы!")
 
 	menu(conn)
+	defer conn.Close(ctx)
 
 }
